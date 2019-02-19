@@ -86,7 +86,6 @@ def initiate_multipart(context, data_dict):
     :rtype: dict
 
     """
-
     h.check_access('cloudstorage_initiate_multipart', data_dict)
     id, name, size = toolkit.get_or_bust(data_dict, ['id', 'name', 'size'])
     user_id = None
@@ -152,7 +151,7 @@ def upload_multipart(context, data_dict):
             uploader, upload.name) + '?partNumber={0}&uploadId={1}'.format(
                 part_number, upload_id),
         method='PUT',
-        data=bytearray(part_content.file.read())
+        data=bytearray(part_content.stream.read())
     )
     if resp.status != 200:
         raise toolkit.ValidationError('Upload failed: part %s' % part_number)
@@ -176,7 +175,6 @@ def finish_multipart(context, data_dict):
     :rtype: NoneType
 
     """
-
     h.check_access('cloudstorage_finish_multipart', data_dict)
     upload_id = toolkit.get_or_bust(data_dict, 'uploadId')
     save_action = data_dict.get('save_action', False)
