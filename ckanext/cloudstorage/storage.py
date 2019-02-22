@@ -12,6 +12,8 @@ from ckan import model
 from ckan.lib import munge
 import ckan.plugins as p
 import logging
+import requests
+import os
 
 from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
@@ -68,8 +70,10 @@ class CloudStorage(object):
                 t = sts.get_session_token()
                 credentials = t["Credentials"]
             elif config['ckanext.cloudstorage.driver_options'] == "use_metadata":
-                meta_data = boto_utils.get_instance_metadata()["iam"]["security-credentials"]
-                credentials = meta_data[meta_data.keys()[0]]
+
+                url = "http://169.254.170.2" + os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+
+                credentials = requests.get(url).json()
                 credentials["SessionToken"] = credentials["Token"]
             else:
                 raise TypeError("Not supported driver_option")
