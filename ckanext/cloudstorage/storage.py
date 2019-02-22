@@ -11,6 +11,7 @@ from pylons import config
 from ckan import model
 from ckan.lib import munge
 import ckan.plugins as p
+import logging
 
 from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
@@ -30,11 +31,15 @@ class CloudStorage(object):
       
     @property
     def use_temporary_credentials(self):
-        if "S3" in self.driver_name and config['ckanext.cloudstorage.driver_options'] == "use_role":
+        if ("S3" in self.driver_name and
+            config['ckanext.cloudstorage.driver_options'] in ["use_role", "use_metadata"]):
             try:
                 global boto3
+                global boto_utils
                 import boto3
+                from boto import utils as boto_utils
                 assert boto3
+                
                 return True
             except:
                 return False
@@ -49,7 +54,6 @@ class CloudStorage(object):
             self._container = self.driver.get_container(
                 container_name=self.container_name
             )
-
         return self._container
 
     @property
@@ -59,9 +63,17 @@ class CloudStorage(object):
         pass to the apache-libcloud driver.
         """
         if self.use_temporary_credentials:
-            sts = boto3.client("sts")
-            t = sts.get_session_token()
-            credentials = t["Credentials"]
+            if config['ckanext.cloudstorage.driver_options'] == "use_role":
+                sts = boto3.client("sts")
+                t = sts.get_session_token()
+                credentials = t["Credentials"]
+            elif config['ckanext.cloudstorage.driver_options'] == "use_metadata":
+                meta_data = boto_utils.get_instance_metadata()["iam"]["security-credentials"]
+                credentials = meta_data[meta_data.keys()[0]]
+                credentials["SessionToken"] = credentials["Token"]
+            else:
+                raise TypeError("Not supported driver_option")
+                
             return {
                 "key": credentials["AccessKeyId"],
                 "secret": credentials["SecretAccessKey"],
@@ -297,6 +309,7 @@ class ResourceCloudStorage(CloudStorage):
         :returns: Externally accessible URL or None.
         """
         # Find the key the file *should* be stored at.
+        logging.error("hei")
         path = self.path_from_filename(rid, filename)
         # If advanced azure features are enabled, generate a temporary
         # shared access link instead of simply redirecting to the file.
@@ -321,12 +334,14 @@ class ResourceCloudStorage(CloudStorage):
         elif self.can_use_advanced_aws and self.use_secure_urls:
             from boto.s3.connection import S3Connection
             if self.use_temporary_credentials:
+
                 s3 = boto3.client('s3')
                 return s3.generate_presigned_url(ClientMethod='get_object',
                                                  Params={
                                                      "Bucket": self.container_name,
                                                      "Key":path}
                 )
+
             s3_connection = S3Connection(
                 self.driver_options['key'],
                 self.driver_options['secret']
