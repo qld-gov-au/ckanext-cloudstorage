@@ -11,10 +11,12 @@ from pylons import config
 from ckan import model
 from ckan.lib import munge
 import ckan.plugins as p
+import logging
+import requests
+import os
 
 from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
-
 
 class CloudStorage(object):
     def __init__(self):
@@ -25,10 +27,26 @@ class CloudStorage(object):
             )
         )(**self.driver_options)
         self._container = None
-
+        
     def path_from_filename(self, rid, filename):
         raise NotImplemented
-
+      
+    @property
+    def use_temporary_credentials(self):
+        if ("S3" in self.driver_name and
+            config['ckanext.cloudstorage.driver_options'] in ["use_role", "use_metadata"]):
+            try:
+                global boto3
+                global boto_utils
+                import boto3
+                from boto import utils as boto_utils
+                assert boto3
+                
+                return True
+            except:
+                return False
+        return False
+    
     @property
     def container(self):
         """
@@ -38,7 +56,6 @@ class CloudStorage(object):
             self._container = self.driver.get_container(
                 container_name=self.container_name
             )
-
         return self._container
 
     @property
@@ -47,7 +64,27 @@ class CloudStorage(object):
         A dictionary of options ckanext-cloudstorage has been configured to
         pass to the apache-libcloud driver.
         """
-        return literal_eval(config['ckanext.cloudstorage.driver_options'])
+        if self.use_temporary_credentials:
+            if config['ckanext.cloudstorage.driver_options'] == "use_role":
+                sts = boto3.client("sts")
+                t = sts.get_session_token()
+                credentials = t["Credentials"]
+            elif config['ckanext.cloudstorage.driver_options'] == "use_metadata":
+
+                url = "http://169.254.170.2" + os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+
+                credentials = requests.get(url).json()
+                credentials["SessionToken"] = credentials["Token"]
+            else:
+                raise TypeError("Not supported driver_option")
+                
+            return {
+                "key": credentials["AccessKeyId"],
+                "secret": credentials["SecretAccessKey"],
+                "token": credentials["SessionToken"]
+            }
+        else:
+            return literal_eval(config['ckanext.cloudstorage.driver_options'])
 
     @property
     def driver_name(self):
@@ -276,8 +313,8 @@ class ResourceCloudStorage(CloudStorage):
         :returns: Externally accessible URL or None.
         """
         # Find the key the file *should* be stored at.
+        logging.error("hei")
         path = self.path_from_filename(rid, filename)
-
         # If advanced azure features are enabled, generate a temporary
         # shared access link instead of simply redirecting to the file.
         if self.can_use_advanced_azure and self.use_secure_urls:
@@ -300,6 +337,15 @@ class ResourceCloudStorage(CloudStorage):
             )
         elif self.can_use_advanced_aws and self.use_secure_urls:
             from boto.s3.connection import S3Connection
+            if self.use_temporary_credentials:
+
+                s3 = boto3.client('s3')
+                return s3.generate_presigned_url(ClientMethod='get_object',
+                                                 Params={
+                                                     "Bucket": self.container_name,
+                                                     "Key":path}
+                )
+
             s3_connection = S3Connection(
                 self.driver_options['key'],
                 self.driver_options['secret']
@@ -312,7 +358,6 @@ class ResourceCloudStorage(CloudStorage):
                                    "key": path}
             if content_type:
                 generate_url_params['headers'] = {"Content-Type": content_type}
-
             return s3_connection.generate_url(**generate_url_params)
 
         # Find the object for the given key.

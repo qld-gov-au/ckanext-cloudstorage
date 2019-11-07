@@ -3,7 +3,7 @@
 from ckan import plugins
 from routes.mapper import SubMapper
 import os.path
-from ckanext.cloudstorage import storage
+from ckanext.cloudstorage import storage, model
 from ckanext.cloudstorage import helpers
 import ckanext.cloudstorage.logic.action.multipart as m_action
 import ckanext.cloudstorage.logic.auth.multipart as m_auth
@@ -33,7 +33,7 @@ class CloudStoragePlugin(plugins.SingletonPlugin):
         )
 
     def configure(self, config):
-
+        model.create_tables()
         required_keys = (
             'ckanext.cloudstorage.driver',
             'ckanext.cloudstorage.driver_options',
