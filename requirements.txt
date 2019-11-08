@@ -1,0 +1,2 @@
+apache-libcloud==1.5.0 #29 Dec 2016
+# apache-libcloud==2.6.0 #26 Aug 2019

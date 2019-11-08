@@ -8,6 +8,13 @@ ckan.egg-info/*
 sandbox/*
 dist
 
+# pylons
+development.ini*
+sstore/*
+data/*
+pylons_data/*
+#ckan/i18n/*/*/*.mo
+
 # other
 pip-requirements-local.txt
 migrate/*
@@ -18,3 +25,17 @@ fl_notes.txt
 *.ini
 .noseids
 *~
+.idea
+.vscode
+
+# nosetest coverage output
+.coverage
+htmlcov/*
+
+# node.js
+node_modules/
+
+# docker
+contrib/docker/.env
+
+test/screenshots
